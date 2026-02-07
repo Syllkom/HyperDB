@@ -290,16 +290,16 @@ Cuando se asigna un objeto a una propiedad:
 
 ```mermaid
 graph TD
-    Input[Set Key: Value] --> Check{Es Objeto?}
+    Input["Set Key: Value"] --> Check{"Es Objeto?"}
     Check -- No --> SaveDirect[Guardar valor en Index actual]
     Check -- Sí --> ShardForge[Llamar a Shard.forge]
     
     ShardForge --> GenID[Generar ID Único]
     ShardForge --> WriteFile[Escribir Value en ID.bin]
-    ShardForge --> ReturnRef[Retornar { $file: ID.bin }]
+    ShardForge --> ReturnRef["Retornar { $file: ID.bin }"]
     
     ReturnRef --> SaveDirect
-    SaveDirect --> CheckThres{Contador >= Threshold?}
+    SaveDirect --> CheckThres{"Contador >= Threshold?"}
     
     CheckThres -- Sí --> DiskWrite[Escribir Index en Disco ahora]
     CheckThres -- No --> SetTimer[Iniciar Timer Debounce]
