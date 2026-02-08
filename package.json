@@ -1,20 +1,13 @@
 {
-  "name": "hyper-db",
-  "version": "1.0.0",
-  "description": "High-performance sharded binary database for Node.js. Zero-dependency, atomic I/O, and transparent Proxy state management.",
+  "name": "@syllkom/hyper-db",
+  "version": "2.0.0",
+  "description": "Minimalist NoSQL sharded database for Node.js. High-performance binary storage that feels like a native JS object via transparent Proxies. Zero dependencies and atomic I/O.",
   "main": "index.js",
   "type": "module",
   "files": [
     "index.js",
     "library/**/*"
   ],
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Syllkom/HyperDB.git"
-  },
   "keywords": [
     "hyper-db",
     "database",
@@ -22,18 +15,12 @@
     "nosql",
     "binary-storage",
     "v8-serialization",
-    "high-performance",
     "proxy",
-    "atomic-write",
     "embedded",
-    "zero-dependency"
+    "atomic-io"
   ],
   "author": "Syllkom",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/Syllkom/HyperDB/issues"
-  },
-  "homepage": "https://github.com/Syllkom/HyperDB#readme",
   "engines": {
     "node": ">=18.0.0"
   }
