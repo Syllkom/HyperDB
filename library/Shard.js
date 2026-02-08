@@ -1,51 +1,83 @@
 import crypto from 'crypto';
 
-export const genId = (depth) => {
-    const id = crypto.randomBytes(4).toString('hex').toUpperCase();
-    if (!depth || depth <= 0) return `${id}.bin`
-    const folder = id.substring(0, depth);
-    return `${folder}/${id}.bin`;
-};
-
-function isShardable(val) {
-    if (!val || typeof val !== 'object') return false;
-    const proto = Object.getPrototypeOf(val);
-    return proto === Object.prototype || proto === null;
-}
-
 export class Shard {
-    constructor(disk, depth) {
+    constructor(disk, indexMap, cluster, depth) {
         this.disk = disk;
-        this.depth = depth;
+        this.indexMap = indexMap;
+        this.cluster = cluster;
+        this.depth = depth || 2;
     }
 
-    purge(index) {
-        if (index.$file) this.disk.remove(index.$file);
-        for (const key in index) {
-            if (key === '$file') continue;
-            if (index[key] && typeof index[key] === 'object')
-                this.purge(index[key]);
-        }
+   static isObject(any) {
+        if (!any) return false;
+        if (typeof any !== 'object') return false;
+        if (Array.isArray(any)) return false;
+        const proto = Object.getPrototypeOf(any);
+        return proto === Object.prototype || proto === null;
     }
 
-    forge(index, value, file) {
-        try {
-            const Id = file || genId(this.depth);
-            value = structuredClone(value);
-            index.$file = Id;
+    genId(depth) {
+        depth = depth || this.depth;
+        const id = crypto.randomBytes(4).toString('hex').toUpperCase();
+        if (!depth || depth <= 0) return `${id}`
+        const folder = id.substring(0, depth);
+        return `${folder}/${id}`;
+    }
 
-            for (const key in value) {
-                 if (!isShardable(value[key])) continue;
-                 
-                index[key] = {};
-                value[key] = this.forge(index[key], value[key]);
+    forge(data, indexMap, cluster) {
+        if (!Shard.isObject(data)) return;
+
+        indexMap = indexMap || this.indexMap;
+        cluster = cluster || this.cluster;
+
+        let mapContent = {};
+        let hubContent = {};
+
+        for (const key in data) {
+            const value = data[key];
+
+            if (Shard.isObject(value)) {
+                const Id = this.genId();
+                const nodeFile = Id + '.node.bin';
+                const mapFile = Id + '.map.bin';
+
+                this.disk.write(mapFile, { $file: mapFile });
+
+                const _Index = new this.indexMap.constructor(this.disk, mapFile);
+                const _Cluster = new this.cluster.constructor(this.disk, _Index);
+
+                this.forge(value, _Index, _Cluster);
+
+                hubContent[key] = `node:${nodeFile}`;
+                mapContent[key] = mapFile;
+            } else {
+                hubContent[key] = value;
             }
-
-            this.disk.write(Id, value);
-            return Id;
-        } catch (e) {
-            this.disk.onError(e.message);
-            return null
         }
+
+        Object.assign(indexMap.data, mapContent);
+        Object.assign(cluster.data, hubContent);
+
+        indexMap.file.save();
+        cluster.node.file.save();
+    }
+
+    purge(mapPath) {
+        if (!mapPath) return;
+        if (typeof mapPath !== 'string') return;
+        if (!mapPath.endsWith('.map.bin')) return;
+        const mapData = this.disk.readSync(mapPath);
+
+        if (!mapData) return;
+        for (const key in mapData) {
+            if (key === '$file') continue;
+            const childPath = mapData[key];
+            this.purge(childPath);
+        }
+
+        const nodePath = mapPath.replace('.map.bin', '.node.bin');
+
+        this.disk.remove(mapPath);
+        this.disk.remove(nodePath);
     }
 }

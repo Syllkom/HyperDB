@@ -1,16 +1,14 @@
 import { Disk } from "./Disk.js";
-import { Index, Cluster } from "./Cluster.js";
-import { Flow } from "./Flow.js";
+import { Cluster } from "./core/Cluster.js";
+import { Index } from "./core/Index.js";
 
-/* Uso:
-new HyperDB({
+/* new HyperDB({
     depth: 2,
-    folder: './storage/database',
+    folder: './data',
     memory: 20,
-    index: { threshold: 10, debounce: 5000 },
+    maps: { threshold: 10, debounce: 5000 },
     nodes: { threshold: 5, debounce: 3000 }
-})
-*/
+}) */
 
 export class HyperDB {
     #options = null;
@@ -21,65 +19,32 @@ export class HyperDB {
 
         this.#options = options;
 
-        // Inyección de dependencias: Disk
-        if (options.$class?.Disk) {
-            const a0 = options.$class.Disk;
-            if (a0.constructor.name == 'Array') {
-                this.disk = new Disk(...a0);
-            } else if (a0.constructor.name == 'Object') {
-                this.disk = new Disk(a0);
-            } else this.disk = a0
-        }
+        this.disk = new Disk({
+            memory: options.memory || 50,
+            folder: options.folder || './data',
+            atomic: options.atomic
+        });
 
-        if (!this.disk) {
-            this.disk = new Disk({
-                memory: { limit: options.memory || 20 },
-                folder: options.folder || './data',
-            });
-        }
-
-        // Inyección de dependencias: Index
-        if (options.$class?.Index) {
-            const a0 = options.$class.Index;
-            if (a0.constructor.name == 'Array') {
-                this.index = new Index(this.disk, ...a0);
-            } else if (a0.constructor.name == 'Object') {
-                this.index = new Index(this.disk, a0);
-            } else this.index = a0
-        }
-
-        if (!this.index) {
-            this.index = new Index(this.disk, {
-                file: {
-                    limit: options.index?.threshold || 10,
-                    delay: options.index?.debounce || 5000
-                }
-            })
-        }
-
-        // Inyección de dependencias: Flow
-        if (options.$class?.Flow) {
-            const a0 = options.$class.Flow;
-            if (a0.constructor.name == 'Array') {
-                this.flow = new Flow(...a0);
-            } else this.flow = a0
-        }
-
-        if (!this.flow) {
-            this.flow = new Flow();
-        }
-
-        /////////////////////////////
+        this.map = new Index(
+            this.disk, 'root.map.bin', {
+            file: {
+                limit: options.maps?.threshold || 10,
+                delay: options.maps?.debounce || 5000
+            }
+        })
 
         this.proxies = new WeakMap();
-        this.flows = new WeakMap();
+        this.data = this.Proxy(this.map);
 
-        this.data = this.Proxy(this.index.data);
         this.shared = {}
     }
 
     memory() {
-        return this.disk.memory.stats()
+        return {
+            maps: this.disk.mapsRam.stats(),
+            nodes: this.disk.nodesRam.stats(),
+            flow: this.disk.flowRam.stats()
+        }
     }
 
     flush() {
@@ -87,59 +52,69 @@ export class HyperDB {
     }
 
     open(...path) {
-        const o = this.index.get(...path)
-        const router = this.flow.get(...path)
-        if (o && o.$file) return this.Proxy(o, router)
-        return false
-    }
+        if (!path.length) return;
+        let a0 = this.map.data;
 
-    Proxy(index, flow) {
-        const DB = this
-        if (!index) index = this.index.data;
-        if (index.$file == 'root.bin') flow = this.flow.tree
+        path = path.filter((o) => {
+            if (typeof o == 'string') return true;
+            else if (o instanceof this.map.constructor) {
+                a0 = o.data; return false;
+            } else return false;
+        });
 
-        if (flow) this.flows.set(index, flow);
-        if (this.proxies.has(index)) return this.proxies.get(index);
-
-        let root = null;
-
-        // Inyección de dependencias: Cluster
-        if (this.#options?.$class?.Cluster) {
-            const a0 = this.#options.$class.Cluster;
-            if (a0.constructor.name === 'Array') {
-                root = new Cluster(this.disk, index, ...a0);
-            } else if (a0.constructor.name === 'Object') {
-                root = new Cluster(this.disk, index, a0);
-            } else root = a0;
+        for (let i = 0; i < path.length; i++) {
+            if (!a0[path[i]]) return false;
+            const file = a0[path[i]];
+            if (typeof file !== 'string') return false;
+            if (!file.endsWith('.map.bin')) return false;
+            a0 = this.disk.readSync(file);
         }
 
-        if (!root) root = new Cluster(this.disk, index, {
+        if (!a0) return false;
+        if (!(a0?.$file)) return false;
+
+        let limit = this.#options?.maps?.threshold || 10;
+        let delay = this.#options?.maps?.debounce || 5000;
+
+        const mapInstance = new this.map.constructor(this.disk, a0.$file,
+                { file: { limit: limit, delay: delay } });
+
+        return this.Proxy(mapInstance)
+    }
+
+    Proxy(map) {
+        if (!map?.data) return;
+
+        const DB = this
+        const a0 = map.data;
+        const root = new Cluster(this.disk, map, {
             shard: { depth: this.#options?.depth || 2 },
             file: {
-                limit: this.#options?.nodes?.threshold || 5,
-                delay: this.#options?.nodes?.debounce || 3000
+                limit: this.#options?.nodes?.threshold || 10,
+                delay: this.#options?.nodes?.debounce || 5000
             }
         });
 
         ////////////////////////////
 
-        const open = (args, index, flow) => {
-            const Open = (object) => () => args.reduce((acc, k) => acc?.[k], object) ?? false;
-            const $index = Open(index)();
-            const $flow = Open(flow)();
-            if ($index && $index.$file) return this.Proxy($index, $flow)
+        const open = (...args) => {
+            const _map = this.open(...args, map);
+            if (_map && _map.$file) return this.Proxy(_map)
         }
 
         const guard = (method) => (...args) => {
-            if (flow?.$proxy && flow?.$proxy?.[method]) {
+            if (!root.flow.isFlow) return;
+            const flow = root.flow.get('proxy');
+
+            if (flow?.[method]) {
                 let control = { end: false, value: null, error: null };
                 const receiver = (method === 'delete') ? null : args[args.length - 1];
 
-                flow.$proxy[method].apply({
+                flow[method].apply({
                     resolve: (val) => { control.end = true; control.value = val },
                     reject: (err) => { control.end = true; control.error = err },
-                    open: (...args) => open(args, index, flow),
-                    data: receiver, index: index, flow: flow,
+                    open: (...args) => open(...args),
+                    data: receiver, map,
                 }, args);
 
                 return control
@@ -148,26 +123,38 @@ export class HyperDB {
 
         const proxy = new Proxy({}, {
             get(target, key, receiver) {
-                if (typeof key === 'symbol') return Reflect.get(target, key);
+                if (typeof key === 'symbol')
+                    return Reflect.get(target, key);
 
-                const flow = DB.flows.get(index);
+                if (key === '$call') return {
+                    define: (o) => { root.flow.set('call', o) },
+                    remove: (key) => { root.flow.delete('call', key) }
+                }
+                if (key === '$proxy') return {
+                    define: (o) => { root.flow.set('proxy', o) },
+                    remove: (key) => { root.flow.delete('proxy', key) }
+                }
 
-                // Flow logic
-                if (flow?.$call && flow?.$call?.[key]) {
-                    const fun = flow.$call[key];
+                const flow = root.flow.isFlow ? (root.flow.get('call')) : null;
+
+                // flow logic
+                if (flow?.[key]) {
+                    const fun = root.flow.get('call', key);
                     if (typeof fun === 'function') {
                         return (...args) => fun.apply({
-                            data: receiver, index: index, flow: flow,
-                            open: (...args) => open(args, index, flow),
+                            data: receiver, index: map, flow: flow,
+                            open: (...args) => open(...args),
                             DB: DB
                         }, args);
                     }
-                } else if (DB.shared[key]) {
+                }
+
+                if (DB.shared[key]) {
                     const fun = DB.shared[key];
                     if (typeof fun === 'function') {
                         return (...args) => fun.apply({
-                            data: receiver, index: index, flow: flow,
-                            open: (...args) => open(args, index, flow),
+                            data: receiver, index: map, flow: flow,
+                            open: (...args) => open(...args),
                             DB: DB
                         }, args);
                     }
@@ -177,11 +164,14 @@ export class HyperDB {
                 if (r?.end && r?.error) throw r.error;
                 if (r?.end) return r.value;
 
-                // Index logic
-                const rootGet = root.get(key);
+                // ////////////////////////////
 
-                if (rootGet?.constructor?.name === 'Object' && rootGet.$file) {
-                    return DB.Proxy(index[key], flow?.[key]);
+                const rootGet = root.get(key);
+                if (typeof rootGet === 'string' && rootGet.startsWith('node:')) {
+                    const IndexConstructor = DB.map.constructor;
+                    const node = new IndexConstructor(DB.disk,
+                        rootGet.replace('node:', '').replace('.node.bin', '.map.bin'));
+                    return DB.Proxy(node);
                 } else {
                     return rootGet;
                 }
@@ -189,19 +179,14 @@ export class HyperDB {
             set(target, key, value, receiver) {
                 const r = guard('set')(target, key, value, receiver);
                 if (r?.end && r?.error) throw r.error;
-                if (r?.end) return r.value;
-
-                root.set(key, value);
-                DB.index.save();
+                root.set(key, (r?.end) ? r.value : value);
                 return true;
             },
             deleteProperty(target, key) {
                 const r = guard('delete')(target, key);
                 if (r?.end && r?.error) throw r.error;
                 if (r?.end) return r.value;
-
                 root.delete(key);
-                DB.index.save();
                 return true;
             },
             ownKeys(target) {
@@ -216,7 +201,7 @@ export class HyperDB {
             }
         })
 
-        this.proxies.set(index, proxy);
+        this.proxies.set(a0, proxy);
         return proxy;
     }
 }

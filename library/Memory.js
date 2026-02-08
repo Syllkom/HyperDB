@@ -1,8 +1,8 @@
 import v8 from 'v8';
 
 export class Memory {
-    constructor(limitMB = 20, pinnedKeys = []) {
-        this.limit = limitMB * 1024 * 1024;
+    constructor(limitMB = 50, pinnedKeys = []) {
+        this.limit = Number(limitMB) * 1024 * 1024;
         this.pinnedKeys = new Set(pinnedKeys);
         this.pinned = new Map();
         this.cache = new Map();
@@ -10,11 +10,7 @@ export class Memory {
     }
 
     #size(data) {
-        try {
-            return v8.serialize(data).length;
-        } catch (e) {
-            return 0;
-        }
+        try { return v8.serialize(data).length; } catch (e) { return 0; }
     }
 
     set(key, data) {
@@ -24,10 +20,10 @@ export class Memory {
         }
 
         if (this.cache.has(key)) this.delete(key);
-        
+
         const dataSize = this.#size(data);
         if (dataSize > this.limit) {
-            console.warn(`[HyperDB:Memory] Object '${key}' exceeds cache limit (${(this.limit / 1024 / 1024).toFixed(2)} MB)`);
+            console.warn(`[HyperDB] ${key} > ${(this.limit / 1024 / 1024).toFixed(2)} MB`);
             return false;
         }
 
@@ -35,7 +31,6 @@ export class Memory {
             const oldestKey = this.cache.keys().next().value;
             this.delete(oldestKey);
         }
-        
         this.cache.set(key, { data, size: dataSize });
         this.currentSize += dataSize;
         return true;
@@ -46,8 +41,6 @@ export class Memory {
 
         const item = this.cache.get(key);
         if (!item) return null;
-        
-        // Refresh LRU
         const data = item.data;
         this.cache.delete(key);
         this.cache.set(key, item);
@@ -65,9 +58,12 @@ export class Memory {
     }
 
     stats() {
+        const kb = this.currentSize / 1024;
+        const mb = this.currentSize / (1024 * 1024);
+
         return {
-            used: (this.currentSize / 1024 / 1024).toFixed(2) + " MB",
-            limit: (this.limit / 1024 / 1024).toFixed(2) + " MB",
+            used: mb < 0.01 ? `${kb.toFixed(2)} KB` : `${mb.toFixed(2)} MB`,
+            limit: (this.limit / (1024 * 1024)).toFixed(2) + " MB",
             items: this.cache.size
         };
     }
