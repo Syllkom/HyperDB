@@ -10,7 +10,7 @@ export class Cluster {
         this.flow = new Flow(disk, indexMap)
         this.node = new Node(disk, indexMap, options)
 
-        this.shard = new Shard(disk, indexMap, this.node)
+        this.shard = new Shard(disk, indexMap, this) 
     }
 
     get data() {
@@ -35,7 +35,7 @@ export class Cluster {
             this.delete(key);
 
         if (Shard.isObject(value)) {
-            this.shard.forge({ [key]: value }, this.indexMap, this.node);
+            this.shard.forge({ [key]: value }, this.indexMap, this);
         } else {
             this.data[key] = value;
             this.node.file.save();
