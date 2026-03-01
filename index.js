@@ -1,21 +1,22 @@
-import { HyperDB } from './library/DB.js'
-import { File } from './library/core/File.js'
-import { Flow } from './library/core/Flow.js'
-import { Cluster } from './library/core/Cluster.js'
-import { Index } from './library/core/Index.js'
-import { Node } from './library/core/Node.js'
-import { Shard } from './library/Shard.js'
-import { Disk } from './library/Disk.js'
-import { Memory } from './library/Memory.js'
+// index.js
+import { HyperDB } from './HyperDB.js';
+import { WriteBuffer } from './engine/primitives/WriteBuffer.js';
+import { EntityRouter } from './engine/primitives/EntityRouter.js';
+import { PointerRegistry } from './engine/primitives/PointerRegistry.js';
+import { StateNode } from './engine/primitives/StateNode.js';
+import { ShardMatrix, HyperType, HyperCodec } from './engine/ShardMatrix.js';
+import { VaultEngine } from './engine/VaultEngine.js';
+import { MemoryArena } from './engine/MemoryArena.js';
 
 export {
+    HyperType,
+    HyperCodec,
     HyperDB,
-    File,
-    Flow,
-    Cluster,
-    Index,
-    Node,
-    Shard,
-    Disk,
-    Memory
-}
+    WriteBuffer,
+    EntityRouter,
+    PointerRegistry,
+    StateNode,
+    ShardMatrix,
+    VaultEngine,
+    MemoryArena
+};

@@ -1,27 +1,34 @@
 {
   "name": "@syllkom/hyper-db",
-  "version": "2.0.0",
-  "description": "Minimalist NoSQL sharded database for Node.js. High-performance binary storage that feels like a native JS object via transparent Proxies. Zero dependencies and atomic I/O.",
+  "version": "3.0.0",
+  "description": "High-performance NoSQL sharded database for Node.js. Features LMDB-backed binary storage, automatic partitioning, Memory Arenas, and transparent JS object persistence via Proxies.",
   "main": "index.js",
   "type": "module",
   "files": [
     "index.js",
-    "library/**/*"
+    "HyperDB.js",
+    "engine/**/*"
   ],
   "keywords": [
     "hyper-db",
     "database",
     "sharding",
     "nosql",
+    "lmdb",
     "binary-storage",
     "v8-serialization",
     "proxy",
     "embedded",
-    "atomic-io"
+    "atomic-io",
+    "memory-arena",
+    "zero-dependency"
   ],
   "author": "Syllkom",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "lmdb": "^3.5.1"
   }
 }
